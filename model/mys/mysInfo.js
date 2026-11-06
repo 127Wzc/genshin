@@ -489,11 +489,14 @@ export default class MysInfo {
         break
       case 1034:
       case 10035:
-        let retry = 0
-        res = await this.geetest(type, mysApi, data, res.retcode)
-        while ([1034, 10035].includes(res?.retcode) && retry < Cfg.getConfig('config').retrytime) {
-          res = await this.geetest(type, mysApi, data, res?.retcode)
-          retry++
+        // 仅手动时直接交给 Handler，避免先调用空的自动识别接口。
+        if (Number(Cfg.getConfig('api').GtestType) !== 0) {
+          let retry = 0
+          res = await this.geetest(type, mysApi, data, res.retcode)
+          while ([1034, 10035].includes(res?.retcode) && retry < Cfg.getConfig('config').retrytime) {
+            res = await this.geetest(type, mysApi, data, res?.retcode)
+            retry++
+          }
         }
 
         /** 验证码流程后若发现ck失效，同样尝试自动刷新后继续查询 */

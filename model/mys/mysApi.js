@@ -177,6 +177,15 @@ export default class MysApi {
 
     let { url, query = '', body = '', config = '', types = '', sign = ''  } = urlMap[type]
 
+    if (['test_nine', 'recognize', 'signrecognize', 'results', 'in', 'res'].includes(type)) {
+      try {
+        if (!['http:', 'https:'].includes(new URL(url).protocol)) throw new Error('Invalid protocol')
+      } catch {
+        logger.error(`[米游社验证码][${type}] 自动识别接口地址未配置或无效，请检查 genshin/config/api.yaml`)
+        return false
+      }
+    }
+
     if (query) url += `?${query}`
     if (body) body = JSON.stringify(body)
 
@@ -355,6 +364,14 @@ export default class MysApi {
     if (data.headers) {
       headers = { ...headers, ...data.headers }
       delete data.headers
+    }
+
+    // 与 GT-Manual 一致，在验证后的重发和后续接口中携带完整凭证。
+    // 仅附加到游戏查询请求，不发送给第三方识别服务或签到接口。
+    if (['gs', 'sr', 'zzz'].includes(this.game) && !this.types.includes(type) && type !== 'sign' && this._gtVerify) {
+      headers['x-rpc-challenge'] = this._gtVerify.challenge
+      headers['x-rpc-validate'] = this._gtVerify.validate
+      headers['x-rpc-seccode'] = `${this._gtVerify.validate}|jordan`
     }
 
     if (type == 'sign' && (data.validate || data.geetest_validate)) {
