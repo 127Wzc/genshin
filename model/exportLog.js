@@ -275,24 +275,57 @@ export default class ExportLog extends base {
     }
   }
 
+  /** LLOneBot 无文件下载地址时，直接读取适配器返回的 Base64。 */
+  async getLocalImportSource() {
+    if (!this.e.file) return false
+
+    let localInfo
+    if (this.e.group?.getLocalFileInfo) {
+      localInfo = await this.e.group.getLocalFileInfo(
+        this.e.file.id || this.e.file.file_id || this.e.file.fid,
+      )
+    } else if (this.e.friend?.getLocalFileInfo) {
+      localInfo = await this.e.friend.getLocalFileInfo(
+        this.e.file.file_id || this.e.file.id || this.e.file.fid,
+      )
+    }
+
+    if (!localInfo?.base64) return false
+
+    return {
+      importName: this.normalizeImportFileName(this.e.file.name || `${this.e.user_id}.json`),
+      fileContent: Buffer.from(localInfo.base64, 'base64').toString('utf8'),
+    }
+  }
+
   /** json导入抽卡记录 */
   async logJson() {
     const importSource = await this.getImportSource()
-    if (!importSource) {
-      this.e.reply('文件链接获取失败')
-      return false
-    }
-    const { textPath, fileUrl, importName } = importSource
+    let fileContent
+    let importName = importSource?.importName
+    // 仅网络下载产生临时文件，Base64 导入不落盘，也不清理同名文件。
+    let textPath = importSource?.textPath
 
-    const ret = await common.downFile(fileUrl, textPath)
-    if (!ret) {
-      this.e.reply('下载json文件错误')
-      return false
+    if (importSource) {
+      const ret = await common.downFile(importSource.fileUrl, textPath)
+      if (!ret) {
+        this.e.reply('下载json文件错误')
+        return false
+      }
+      fileContent = fs.readFileSync(textPath, 'utf8')
+    } else {
+      const localSource = await this.getLocalImportSource()
+      if (!localSource) {
+        this.e.reply('文件链接获取失败')
+        return false
+      }
+      fileContent = localSource.fileContent
+      importName = localSource.importName
     }
     try {
       let json = {}
       try {
-        json = JSON.parse(fs.readFileSync(textPath, 'utf8'))
+        json = JSON.parse(fileContent)
       } catch (error) {
         this.e.reply(`${importName},json格式错误`)
         return false
@@ -414,7 +447,7 @@ export default class ExportLog extends base {
       )
     } finally {
       /** 清理文件 */
-      if (fs.existsSync(textPath)) fs.unlink(textPath, () => {})
+      if (textPath && fs.existsSync(textPath)) fs.unlink(textPath, () => {})
     }
   }
 
